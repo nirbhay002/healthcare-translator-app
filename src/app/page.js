@@ -36,7 +36,8 @@ export default function Home() {
   // Refs
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(false);
-  const cumulativeTranscriptRef = useRef(""); // Specifically for mobile logic
+  // This ref is now used EXCLUSIVELY for the mobile logic
+  const cumulativeTranscriptRef = useRef("");
 
   // Effect to keep our listening state ref in sync
   useEffect(() => {
@@ -59,6 +60,7 @@ export default function Home() {
 
     if (isMobile) {
       // --- MOBILE LOGIC ---
+      // This is the "append and restart" logic that was working before.
       recog.onresult = (event) => {
         let interimTranscript = "";
         for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -70,12 +72,14 @@ export default function Home() {
       recog.onend = () => {
         if (isListeningRef.current) {
           console.log("Mobile timeout detected, saving transcript and restarting...");
+          // Save the full transcript so far before restarting
           cumulativeTranscriptRef.current = liveSourceTranscript + " ";
           recognitionRef.current.start();
         }
       };
     } else {
-      // --- DESKTOP LOGIC (The simpler, original version) ---
+      // --- DESKTOP LOGIC ---
+      // This is the simple, direct logic that works reliably on laptops.
       recog.onresult = (event) => {
         let fullTranscript = "";
         for (let i = 0; i < event.results.length; i++) {
@@ -85,6 +89,7 @@ export default function Home() {
       };
 
       recog.onend = () => {
+        // On desktop, onend only fires on manual stop, so just clean up.
         setIsListening(false);
         setCurrentSpeaker(null);
       };
@@ -108,7 +113,7 @@ export default function Home() {
 
   const stopListening = () => {
     if (recognitionRef.current) {
-      // Set the flag to false so the onend handler knows this was a manual stop
+      // Set the flag to false so the mobile onend handler knows this was a manual stop
       setIsListening(false); 
       recognitionRef.current.stop();
       
