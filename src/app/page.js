@@ -1,103 +1,203 @@
-import Image from "next/image";
+// File: app/page.js
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+
+// Language configuration
+const languages = [
+  { code: 'en-US', name: 'English (US)' },
+  { code: 'hi-IN', name: 'Hindi' },
+  { code: 'es-ES', name: 'Spanish' },
+  { code: 'fr-FR', name: 'French' },
+  { code: 'de-DE', name: 'German' },
+  { code: 'zh-CN', name: 'Mandarin (China)' },
+  { code: 'ja-JP', name: 'Japanese' },
+  { code: 'ar-SA', name: 'Arabic' },
+];
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  // State variables
+  const [patientLang, setPatientLang] = useState('hi-IN');
+  const [providerLang, setProviderLang] = useState('en-US');
+  const [conversation, setConversation] = useState([]);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [currentSpeaker, setCurrentSpeaker] = useState(null);
+  const [liveSourceTranscript, setLiveSourceTranscript] = useState("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Refs
+  const recognitionRef = useRef(null);
+  const transcriptRef = useRef("");
+  const speakerRef = useRef(null);
+
+  // Effect to keep refs in sync with state
+  useEffect(() => {
+    transcriptRef.current = liveSourceTranscript;
+    speakerRef.current = currentSpeaker;
+  }, [liveSourceTranscript, currentSpeaker]);
+
+  // Effect to set up speech recognition only once
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.error("Speech Recognition not supported.");
+      return;
+    }
+    const recog = new SpeechRecognition();
+    recog.continuous = true;
+    recog.interimResults = true;
+    
+    recog.onresult = (event) => {
+      let fullTranscript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
+      }
+      setLiveSourceTranscript(fullTranscript);
+    };
+
+    recog.onend = () => {
+      setIsListening(false);
+      setCurrentSpeaker(null);
+    };
+    
+    recognitionRef.current = recog;
+  }, []);
+
+  const startListening = (speaker) => {
+    if (recognitionRef.current) {
+      setLiveSourceTranscript(""); 
+      const lang = speaker === 'patient' ? patientLang : providerLang;
+      recognitionRef.current.lang = lang;
+      setCurrentSpeaker(speaker);
+      setIsListening(true);
+      recognitionRef.current.start();
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      
+      const finalTranscript = transcriptRef.current;
+      const finalSpeaker = speakerRef.current;
+
+      if (finalTranscript.trim()) {
+        handleFinalTranslate(finalTranscript, finalSpeaker);
+      }
+      setLiveSourceTranscript(""); 
+    }
+  };
+
+  const handleFinalTranslate = async (text, speaker) => {
+    if (!text || !speaker) return;
+    const sourceLang = speaker === 'patient' ? patientLang : providerLang;
+    const targetLang = speaker === 'patient' ? providerLang : patientLang;
+    const sourceLangName = languages.find(l => l.code === sourceLang)?.name;
+    const targetLangName = languages.find(l => l.code === targetLang)?.name;
+    
+    try {
+      const response = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, sourceLang: sourceLangName, targetLang: targetLangName }),
+      });
+      const data = await response.json();
+      if (data.translatedText) {
+        const newMessage = { speaker, originalText: text, translatedText: data.translatedText, targetLang: targetLang };
+        setConversation(prev => [...prev, newMessage]);
+        speak(data.translatedText, targetLang);
+      }
+    } catch (error) {
+        console.error("Error in final translation", error);
+    }
+  };
+
+  const speak = (text, lang) => {
+    if (!text || !lang || isSpeaking) return;
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
+
+  return (
+    <main className="flex flex-col items-center min-h-screen p-4 bg-gray-100 font-sans">
+      {/* Mobile-Friendly Container: limits width on large screens, full width on mobile */}
+      <div className="w-full max-w-5xl mx-auto">
+        <header className="text-center mb-6">
+          {/* Mobile-Friendly Text: Smaller on mobile, larger on desktop */}
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">AI Health Translator</h1>
+          <p className="text-lg text-gray-600">Seamless Patient-Provider Communication</p>
+        </header>
+
+        {/* This grid is already mobile-friendly: stacks on mobile, side-by-side on medium screens+ */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-white rounded-lg shadow-md mb-6">
+          <div>
+            <label htmlFor="patient-lang" className="block text-lg font-medium text-gray-700">Patient's Language</label>
+            <select id="patient-lang" value={patientLang} onChange={e => setPatientLang(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+              {languages.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="provider-lang" className="block text-lg font-medium text-gray-700">Provider's Language</label>
+            <select id="provider-lang" value={providerLang} onChange={e => setProviderLang(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+              {languages.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
+            </select>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {/* Mobile-Friendly Buttons: Stacks buttons vertically on small screens, horizontal on larger screens */}
+        <div className="flex flex-col sm:flex-row sm:justify-around items-center p-4 mb-6 space-y-4 sm:space-y-0 sm:space-x-4">
+          <button onClick={() => startListening('patient')} disabled={isListening || isSpeaking} className="w-full sm:w-auto px-6 py-3 text-base sm:px-8 sm:py-4 sm:text-lg font-semibold rounded-full text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 transition-colors">Patient Speaks</button>
+          <button onClick={() => { if (isListening) stopListening(); if (isSpeaking) stopSpeaking(); }} disabled={!isListening && !isSpeaking} className="w-full sm:w-auto px-6 py-3 text-base sm:px-8 sm:py-4 sm:text-lg font-semibold rounded-full text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 transition-colors">STOP</button>
+          <button onClick={() => startListening('provider')} disabled={isListening || isSpeaking} className="w-full sm:w-auto px-6 py-3 text-base sm:px-8 sm:py-4 sm:text-lg font-semibold rounded-full text-white bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 transition-colors">Provider Speaks</button>
+        </div>
+
+        {/* This grid is already mobile-friendly: stacks on mobile/tablet, side-by-side on large screens+ */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h2 className="text-2xl font-semibold mb-4 border-b pb-2">Live Transcript</h2>
+            {isListening ? (
+              <div>
+                <p className="font-medium text-gray-700 text-lg">Listening to <span className="font-bold capitalize">{currentSpeaker}...</span></p>
+                <div className="mt-4 p-4 border-2 border-dashed rounded-lg min-h-[120px] text-gray-800">
+                  {liveSourceTranscript}
+                </div>
+                {/* --- NEW FEATURE: User Instruction --- */}
+                <p className="text-sm text-gray-500 italic text-center mt-2">When you are finished speaking, press the STOP button.</p>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center min-h-[160px] text-gray-500 text-center">
+                <p>Click "Patient Speaks" or "Provider Speaks" to begin.</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h2 className="text-2xl font-semibold mb-4 border-b pb-2">Full Conversation</h2>
+            <div className="space-y-4 h-[50vh] overflow-y-auto pr-2">
+              {conversation.map((msg, index) => (
+                <div key={index} className={`flex ${msg.speaker === 'patient' ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-md p-3 rounded-lg ${msg.speaker === 'patient' ? 'bg-blue-100' : 'bg-teal-100'}`}>
+                    <p className="text-sm text-gray-500 font-medium capitalize">{msg.speaker} said:</p>
+                    <p className="text-sm italic text-gray-600">"{msg.originalText}"</p>
+                    <p className="text-lg font-semibold text-gray-800 mt-1">{msg.translatedText}</p>
+                    <button onClick={() => speak(msg.translatedText, msg.targetLang)} title="Play audio" className="text-indigo-600 mt-1 text-2xl">🔊</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
