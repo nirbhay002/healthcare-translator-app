@@ -15,6 +15,14 @@ const languages = [
   { code: 'ar-SA', name: 'Arabic' },
 ];
 
+// Helper function to detect mobile devices
+const isMobileDevice = () => {
+  if (typeof window !== 'undefined') {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }
+  return false;
+};
+
 export default function Home() {
   // State variables
   const [patientLang, setPatientLang] = useState('hi-IN');
@@ -46,24 +54,31 @@ export default function Home() {
     recog.continuous = true;
     recog.interimResults = true;
     
-    // --- THE ROBUST FIX IS HERE ---
-    // This onresult handler correctly rebuilds the transcript for the current session.
+    // --- SEPARATE LOGIC IMPLEMENTATION ---
+    const isMobile = isMobileDevice();
+
     recog.onresult = (event) => {
-      let currentSessionTranscript = "";
-      // Loop through all results for the CURRENT session to build the full sentence.
-      for (let i = 0; i < event.results.length; i++) {
-        currentSessionTranscript += event.results[i][0].transcript;
+      let interimTranscript = "";
+      // On mobile, we only care about the newest part of the speech
+      const startIndex = isMobile ? event.resultIndex : 0;
+      for (let i = startIndex; i < event.results.length; ++i) {
+        interimTranscript += event.results[i][0].transcript;
       }
-      // Combine the stored previous transcript with the live one.
-      setLiveSourceTranscript(cumulativeTranscriptRef.current + currentSessionTranscript);
+      // On mobile, we append. On desktop, we overwrite.
+      setLiveSourceTranscript(cumulativeTranscriptRef.current + interimTranscript);
     };
 
     recog.onend = () => {
-      if (isListeningRef.current) {
-        console.log("Speech recognition timed out, saving transcript and restarting...");
-        // Save the full, combined transcript before restarting.
+      // This auto-restart logic will ONLY run on mobile devices
+      if (isMobile && isListeningRef.current) {
+        console.log("Mobile timeout detected, saving transcript and restarting...");
+        // Save the full transcript so far before restarting
         cumulativeTranscriptRef.current = liveSourceTranscript + " ";
         recognitionRef.current.start();
+      } else {
+        // On desktop, or on manual stop, just clean up the state
+        setIsListening(false);
+        setCurrentSpeaker(null);
       }
     };
     
@@ -85,7 +100,8 @@ export default function Home() {
 
   const stopListening = () => {
     if (recognitionRef.current) {
-      setIsListening(false);
+      // Set the flag to false so the onend handler knows this was a manual stop
+      setIsListening(false); 
       recognitionRef.current.stop();
       
       const finalTranscript = liveSourceTranscript;
