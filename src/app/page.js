@@ -36,13 +36,14 @@ export default function Home() {
   // Refs
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(false);
-  // This ref is now used EXCLUSIVELY for the mobile logic
-  const cumulativeTranscriptRef = useRef("");
+  const transcriptRef = useRef(""); // A mirror of the live transcript state
+  const finalizedTranscriptRef = useRef(""); // Exclusively for the mobile logic
 
-  // Effect to keep our listening state ref in sync
+  // Effect to keep our refs in sync with the latest state
   useEffect(() => {
     isListeningRef.current = isListening;
-  }, [isListening]);
+    transcriptRef.current = liveSourceTranscript;
+  }, [isListening, liveSourceTranscript]);
 
   // Effect to set up speech recognition only once
   useEffect(() => {
@@ -59,27 +60,32 @@ export default function Home() {
     const isMobile = isMobileDevice();
 
     if (isMobile) {
-      // --- MOBILE LOGIC ---
-      // This is the "append and restart" logic that was working before.
+      // --- MOBILE LOGIC (Based on your working code) ---
+      console.log("Mobile device detected. Using mobile-specific logic.");
       recog.onresult = (event) => {
         let interimTranscript = "";
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           interimTranscript += event.results[i][0].transcript;
         }
-        setLiveSourceTranscript(cumulativeTranscriptRef.current + interimTranscript);
+        // Combine the previously saved transcript with the new, live part
+        setLiveSourceTranscript(finalizedTranscriptRef.current + interimTranscript);
       };
 
       recog.onend = () => {
+        // If this was a mobile timeout (and not a manual stop)
         if (isListeningRef.current) {
+          // Save the full transcript so far into our ref, adding a space.
+          finalizedTranscriptRef.current = transcriptRef.current + " ";
           console.log("Mobile timeout detected, saving transcript and restarting...");
-          // Save the full transcript so far before restarting
-          cumulativeTranscriptRef.current = liveSourceTranscript + " ";
           recognitionRef.current.start();
+        } else {
+          // On manual stop, just clean up.
+          setCurrentSpeaker(null);
         }
       };
     } else {
       // --- DESKTOP LOGIC ---
-      // This is the simple, direct logic that works reliably on laptops.
+      console.log("Desktop device detected. Using desktop-specific logic.");
       recog.onresult = (event) => {
         let fullTranscript = "";
         for (let i = 0; i < event.results.length; i++) {
@@ -89,7 +95,7 @@ export default function Home() {
       };
 
       recog.onend = () => {
-        // On desktop, onend only fires on manual stop, so just clean up.
+        // On desktop, onend only fires on manual stop.
         setIsListening(false);
         setCurrentSpeaker(null);
       };
@@ -102,7 +108,7 @@ export default function Home() {
     if (recognitionRef.current) {
       // Reset everything for a new session
       setLiveSourceTranscript(""); 
-      cumulativeTranscriptRef.current = "";
+      finalizedTranscriptRef.current = "";
       const lang = speaker === 'patient' ? patientLang : providerLang;
       recognitionRef.current.lang = lang;
       setCurrentSpeaker(speaker);
@@ -117,7 +123,7 @@ export default function Home() {
       setIsListening(false); 
       recognitionRef.current.stop();
       
-      const finalTranscript = liveSourceTranscript;
+      const finalTranscript = transcriptRef.current; // Get the final value from the ref
       const finalSpeaker = currentSpeaker;
 
       if (finalTranscript.trim()) {
@@ -126,7 +132,7 @@ export default function Home() {
       
       // Reset for the next session
       setLiveSourceTranscript("");
-      cumulativeTranscriptRef.current = "";
+      finalizedTranscriptRef.current = "";
       setCurrentSpeaker(null);
     }
   };
