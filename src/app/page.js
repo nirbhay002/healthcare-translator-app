@@ -29,12 +29,17 @@ export default function Home() {
   const recognitionRef = useRef(null);
   const transcriptRef = useRef("");
   const speakerRef = useRef(null);
+  // --- 1. NEW REF to track listening state for our workaround ---
+  const isListeningRef = useRef(false);
+
 
   // Effect to keep refs in sync with state
   useEffect(() => {
     transcriptRef.current = liveSourceTranscript;
     speakerRef.current = currentSpeaker;
-  }, [liveSourceTranscript, currentSpeaker]);
+    // --- 2. Keep our new ref in sync with the isListening state ---
+    isListeningRef.current = isListening;
+  }, [liveSourceTranscript, currentSpeaker, isListening]);
 
   // Effect to set up speech recognition only once
   useEffect(() => {
@@ -55,9 +60,16 @@ export default function Home() {
       setLiveSourceTranscript(fullTranscript);
     };
 
+    // --- 3. THE MOBILE FIX: Add auto-restart logic to onend ---
     recog.onend = () => {
-      setIsListening(false);
-      setCurrentSpeaker(null);
+      // Check our ref. If we are still supposed to be listening, it was a mobile timeout.
+      if (isListeningRef.current) {
+        console.log("Speech recognition timed out, restarting...");
+        recognitionRef.current.start(); // Restart it
+      } else {
+        // Otherwise, it was a manual stop.
+        setCurrentSpeaker(null);
+      }
     };
     
     recognitionRef.current = recog;
@@ -69,13 +81,15 @@ export default function Home() {
       const lang = speaker === 'patient' ? patientLang : providerLang;
       recognitionRef.current.lang = lang;
       setCurrentSpeaker(speaker);
-      setIsListening(true);
+      setIsListening(true); // This will set isListeningRef.current to true via the other useEffect
       recognitionRef.current.start();
     }
   };
 
   const stopListening = () => {
     if (recognitionRef.current) {
+      // --- 4. Tell our ref that we are stopping manually ---
+      setIsListening(false);
       recognitionRef.current.stop();
       
       const finalTranscript = transcriptRef.current;
@@ -138,14 +152,12 @@ export default function Home() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-white rounded-lg shadow-md mb-6">
           <div>
-            {/* --- FIX 1: Replaced ' with &apos; --- */}
             <label htmlFor="patient-lang" className="block text-lg font-medium text-gray-700">Patient&apos;s Language</label>
             <select id="patient-lang" value={patientLang} onChange={e => setPatientLang(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
               {languages.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
             </select>
           </div>
           <div>
-            {/* --- FIX 2: Replaced ' with &apos; --- */}
             <label htmlFor="provider-lang" className="block text-lg font-medium text-gray-700">Provider&apos;s Language</label>
             <select id="provider-lang" value={providerLang} onChange={e => setProviderLang(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
               {languages.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
@@ -184,7 +196,6 @@ export default function Home() {
                 <div key={index} className={`flex ${msg.speaker === 'patient' ? 'justify-start' : 'justify-end'}`}>
                   <div className={`max-w-md p-3 rounded-lg ${msg.speaker === 'patient' ? 'bg-blue-100' : 'bg-teal-100'}`}>
                     <p className="text-sm text-gray-500 font-medium capitalize">{msg.speaker} said:</p>
-                    {/* --- FIX 3: Replaced " with &quot; --- */}
                     <p className="text-sm italic text-gray-600">&quot;{msg.originalText}&quot;</p>
                     <p className="text-lg font-semibold text-gray-800 mt-1">{msg.translatedText}</p>
                     <button onClick={() => speak(msg.translatedText, msg.targetLang)} title="Play audio" className="text-indigo-600 mt-1 text-2xl">🔊</button>
