@@ -29,15 +29,15 @@ export default function Home() {
   const recognitionRef = useRef(null);
   const transcriptRef = useRef("");
   const speakerRef = useRef(null);
-  // --- 1. NEW REF to track listening state for our workaround ---
   const isListeningRef = useRef(false);
+  // --- 1. NEW REF to store the cumulative transcript ---
+  const finalizedTranscriptRef = useRef("");
 
 
   // Effect to keep refs in sync with state
   useEffect(() => {
     transcriptRef.current = liveSourceTranscript;
     speakerRef.current = currentSpeaker;
-    // --- 2. Keep our new ref in sync with the isListening state ---
     isListeningRef.current = isListening;
   }, [liveSourceTranscript, currentSpeaker, isListening]);
 
@@ -52,22 +52,23 @@ export default function Home() {
     recog.continuous = true;
     recog.interimResults = true;
     
+    // --- 2. UPDATE onresult to combine finalized and new text ---
     recog.onresult = (event) => {
-      let fullTranscript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        fullTranscript += event.results[i][0].transcript;
+      let interimTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        interimTranscript += event.results[i][0].transcript;
       }
-      setLiveSourceTranscript(fullTranscript);
+      // Combine the previously saved transcript with the new, live part
+      setLiveSourceTranscript(finalizedTranscriptRef.current + interimTranscript);
     };
 
-    // --- 3. THE MOBILE FIX: Add auto-restart logic to onend ---
     recog.onend = () => {
-      // Check our ref. If we are still supposed to be listening, it was a mobile timeout.
       if (isListeningRef.current) {
+        // --- 3. SAVE the transcript before restarting ---
+        finalizedTranscriptRef.current = transcriptRef.current + " "; // Add space
         console.log("Speech recognition timed out, restarting...");
-        recognitionRef.current.start(); // Restart it
+        recognitionRef.current.start();
       } else {
-        // Otherwise, it was a manual stop.
         setCurrentSpeaker(null);
       }
     };
@@ -77,18 +78,19 @@ export default function Home() {
 
   const startListening = (speaker) => {
     if (recognitionRef.current) {
+      // --- 4. RESET everything for a fresh start ---
       setLiveSourceTranscript(""); 
+      finalizedTranscriptRef.current = "";
       const lang = speaker === 'patient' ? patientLang : providerLang;
       recognitionRef.current.lang = lang;
       setCurrentSpeaker(speaker);
-      setIsListening(true); // This will set isListeningRef.current to true via the other useEffect
+      setIsListening(true);
       recognitionRef.current.start();
     }
   };
 
   const stopListening = () => {
     if (recognitionRef.current) {
-      // --- 4. Tell our ref that we are stopping manually ---
       setIsListening(false);
       recognitionRef.current.stop();
       
@@ -98,11 +100,14 @@ export default function Home() {
       if (finalTranscript.trim()) {
         handleFinalTranslate(finalTranscript, finalSpeaker);
       }
+      // --- 5. RESET for the next session ---
       setLiveSourceTranscript(""); 
+      finalizedTranscriptRef.current = "";
     }
   };
 
   const handleFinalTranslate = async (text, speaker) => {
+    // This function remains unchanged
     if (!text || !speaker) return;
     const sourceLang = speaker === 'patient' ? patientLang : providerLang;
     const targetLang = speaker === 'patient' ? providerLang : patientLang;
@@ -127,6 +132,7 @@ export default function Home() {
   };
 
   const speak = (text, lang) => {
+    // This function remains unchanged
     if (!text || !lang || isSpeaking) return;
     speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
@@ -138,11 +144,13 @@ export default function Home() {
   };
 
   const stopSpeaking = () => {
+    // This function remains unchanged
     speechSynthesis.cancel();
     setIsSpeaking(false);
   };
 
   return (
+    // The JSX (UI) part remains completely unchanged
     <main className="flex flex-col items-center min-h-screen p-4 bg-gray-100 font-sans">
       <div className="w-full max-w-5xl mx-auto">
         <header className="text-center mb-6">
