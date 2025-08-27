@@ -18,7 +18,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // --- CRITICAL PROMPT ENHANCEMENT ---
     // This new, stricter prompt ensures clean, professional output.
