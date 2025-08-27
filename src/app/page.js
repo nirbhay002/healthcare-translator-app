@@ -27,10 +27,11 @@ export default function Home() {
 
   // Refs
   const recognitionRef = useRef(null);
-  // We only need one ref to track the listening state for the onend handler
   const isListeningRef = useRef(false);
+  // --- 1. REF to store the cumulative transcript, as you suggested ---
+  const cumulativeTranscriptRef = useRef("");
 
-  // Effect to keep our ref in sync with the isListening state
+  // Effect to keep our listening state ref in sync
   useEffect(() => {
     isListeningRef.current = isListening;
   }, [isListening]);
@@ -46,21 +47,24 @@ export default function Home() {
     recog.continuous = true;
     recog.interimResults = true;
     
+    // --- 2. UPDATE onresult to combine cumulative and new text ---
     recog.onresult = (event) => {
-      let fullTranscript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        fullTranscript += event.results[i][0].transcript;
+      let interimTranscript = "";
+      // Start from event.resultIndex to get only the new part
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        interimTranscript += event.results[i][0].transcript;
       }
-      setLiveSourceTranscript(fullTranscript);
+      // Display the combined transcript
+      setLiveSourceTranscript(cumulativeTranscriptRef.current + interimTranscript);
     };
 
-    // --- THE UNIVERSAL FIX ---
-    // This onend handler's only job is to handle mobile timeouts.
     recog.onend = () => {
-      // Check the ref. If we are still supposed to be listening, it was a timeout.
+      // Check if this was a mobile timeout (and not a manual stop)
       if (isListeningRef.current) {
-        console.log("Speech recognition timed out, restarting...");
-        recognitionRef.current.start(); // Just restart it. Don't process the transcript here.
+        console.log("Speech recognition timed out, saving transcript and restarting...");
+        // --- 3. SAVE the full transcript before restarting ---
+        cumulativeTranscriptRef.current = liveSourceTranscript + " ";
+        recognitionRef.current.start(); // Restart listening
       }
     };
     
@@ -69,32 +73,33 @@ export default function Home() {
 
   const startListening = (speaker) => {
     if (recognitionRef.current) {
+      // --- 4. RESET everything for a new session ---
       setLiveSourceTranscript(""); 
+      cumulativeTranscriptRef.current = "";
       const lang = speaker === 'patient' ? patientLang : providerLang;
       recognitionRef.current.lang = lang;
       setCurrentSpeaker(speaker);
-      setIsListening(true); // This triggers the useEffect to update our ref
+      setIsListening(true);
       recognitionRef.current.start();
     }
   };
 
-  // The stopListening function is now the only place that processes the final transcript.
   const stopListening = () => {
     if (recognitionRef.current) {
-      setIsListening(false); // This tells the onend handler not to restart
+      setIsListening(false); // This tells onend not to restart
       recognitionRef.current.stop();
       
-      // We use a short timeout to ensure the final transcript state is captured
-      setTimeout(() => {
-        const finalTranscript = liveSourceTranscript;
-        const finalSpeaker = currentSpeaker;
+      const finalTranscript = liveSourceTranscript; // The state has the full cumulative text
+      const finalSpeaker = currentSpeaker;
 
-        if (finalTranscript.trim()) {
-          handleFinalTranslate(finalTranscript, finalSpeaker);
-        }
-        setLiveSourceTranscript("");
-        setCurrentSpeaker(null);
-      }, 100); // A 100ms delay is enough to capture the final result
+      if (finalTranscript.trim()) {
+        handleFinalTranslate(finalTranscript, finalSpeaker);
+      }
+      
+      // --- 5. RESET for the next session ---
+      setLiveSourceTranscript("");
+      cumulativeTranscriptRef.current = "";
+      setCurrentSpeaker(null);
     }
   };
 
