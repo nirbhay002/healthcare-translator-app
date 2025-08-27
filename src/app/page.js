@@ -27,20 +27,13 @@ export default function Home() {
 
   // Refs
   const recognitionRef = useRef(null);
-  const transcriptRef = useRef("");
-  const speakerRef = useRef(null);
+  // We only need one ref to track the listening state for the onend handler
   const isListeningRef = useRef(false);
-  const finalizedTranscriptRef = useRef("");
-  // --- 1. NEW REF to track if the stop was manual ---
-  const manualStopRef = useRef(false);
 
-
-  // Effect to keep refs in sync with state
+  // Effect to keep our ref in sync with the isListening state
   useEffect(() => {
-    transcriptRef.current = liveSourceTranscript;
-    speakerRef.current = currentSpeaker;
     isListeningRef.current = isListening;
-  }, [liveSourceTranscript, currentSpeaker, isListening]);
+  }, [isListening]);
 
   // Effect to set up speech recognition only once
   useEffect(() => {
@@ -54,24 +47,20 @@ export default function Home() {
     recog.interimResults = true;
     
     recog.onresult = (event) => {
-      let interimTranscript = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        interimTranscript += event.results[i][0].transcript;
+      let fullTranscript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript;
       }
-      setLiveSourceTranscript(finalizedTranscriptRef.current + interimTranscript);
+      setLiveSourceTranscript(fullTranscript);
     };
 
-    // --- 2. UPDATE onend to check our new manual stop flag ---
+    // --- THE UNIVERSAL FIX ---
+    // This onend handler's only job is to handle mobile timeouts.
     recog.onend = () => {
-      // Only auto-restart if it was a mobile timeout (i.e., NOT a manual stop)
-      if (isListeningRef.current && !manualStopRef.current) {
-        finalizedTranscriptRef.current = transcriptRef.current + " ";
+      // Check the ref. If we are still supposed to be listening, it was a timeout.
+      if (isListeningRef.current) {
         console.log("Speech recognition timed out, restarting...");
-        recognitionRef.current.start();
-      } else {
-        // This path is now taken for all manual stops (desktop and mobile)
-        setIsListening(false);
-        setCurrentSpeaker(null);
+        recognitionRef.current.start(); // Just restart it. Don't process the transcript here.
       }
     };
     
@@ -81,32 +70,31 @@ export default function Home() {
   const startListening = (speaker) => {
     if (recognitionRef.current) {
       setLiveSourceTranscript(""); 
-      finalizedTranscriptRef.current = "";
-      // --- 3. RESET the manual stop flag at the start ---
-      manualStopRef.current = false;
       const lang = speaker === 'patient' ? patientLang : providerLang;
       recognitionRef.current.lang = lang;
       setCurrentSpeaker(speaker);
-      setIsListening(true);
+      setIsListening(true); // This triggers the useEffect to update our ref
       recognitionRef.current.start();
     }
   };
 
+  // The stopListening function is now the only place that processes the final transcript.
   const stopListening = () => {
     if (recognitionRef.current) {
-      // --- 4. SET the manual stop flag before stopping ---
-      manualStopRef.current = true;
-      setIsListening(false);
+      setIsListening(false); // This tells the onend handler not to restart
       recognitionRef.current.stop();
       
-      const finalTranscript = transcriptRef.current;
-      const finalSpeaker = speakerRef.current;
+      // We use a short timeout to ensure the final transcript state is captured
+      setTimeout(() => {
+        const finalTranscript = liveSourceTranscript;
+        const finalSpeaker = currentSpeaker;
 
-      if (finalTranscript.trim()) {
-        handleFinalTranslate(finalTranscript, finalSpeaker);
-      }
-      setLiveSourceTranscript(""); 
-      finalizedTranscriptRef.current = "";
+        if (finalTranscript.trim()) {
+          handleFinalTranslate(finalTranscript, finalSpeaker);
+        }
+        setLiveSourceTranscript("");
+        setCurrentSpeaker(null);
+      }, 100); // A 100ms delay is enough to capture the final result
     }
   };
 
