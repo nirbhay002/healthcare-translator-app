@@ -30,8 +30,9 @@ export default function Home() {
   const transcriptRef = useRef("");
   const speakerRef = useRef(null);
   const isListeningRef = useRef(false);
-  // --- 1. NEW REF to store the cumulative transcript ---
   const finalizedTranscriptRef = useRef("");
+  // --- 1. NEW REF to track if the stop was manual ---
+  const manualStopRef = useRef(false);
 
 
   // Effect to keep refs in sync with state
@@ -52,23 +53,24 @@ export default function Home() {
     recog.continuous = true;
     recog.interimResults = true;
     
-    // --- 2. UPDATE onresult to combine finalized and new text ---
     recog.onresult = (event) => {
       let interimTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         interimTranscript += event.results[i][0].transcript;
       }
-      // Combine the previously saved transcript with the new, live part
       setLiveSourceTranscript(finalizedTranscriptRef.current + interimTranscript);
     };
 
+    // --- 2. UPDATE onend to check our new manual stop flag ---
     recog.onend = () => {
-      if (isListeningRef.current) {
-        // --- 3. SAVE the transcript before restarting ---
-        finalizedTranscriptRef.current = transcriptRef.current + " "; // Add space
+      // Only auto-restart if it was a mobile timeout (i.e., NOT a manual stop)
+      if (isListeningRef.current && !manualStopRef.current) {
+        finalizedTranscriptRef.current = transcriptRef.current + " ";
         console.log("Speech recognition timed out, restarting...");
         recognitionRef.current.start();
       } else {
+        // This path is now taken for all manual stops (desktop and mobile)
+        setIsListening(false);
         setCurrentSpeaker(null);
       }
     };
@@ -78,9 +80,10 @@ export default function Home() {
 
   const startListening = (speaker) => {
     if (recognitionRef.current) {
-      // --- 4. RESET everything for a fresh start ---
       setLiveSourceTranscript(""); 
       finalizedTranscriptRef.current = "";
+      // --- 3. RESET the manual stop flag at the start ---
+      manualStopRef.current = false;
       const lang = speaker === 'patient' ? patientLang : providerLang;
       recognitionRef.current.lang = lang;
       setCurrentSpeaker(speaker);
@@ -91,6 +94,8 @@ export default function Home() {
 
   const stopListening = () => {
     if (recognitionRef.current) {
+      // --- 4. SET the manual stop flag before stopping ---
+      manualStopRef.current = true;
       setIsListening(false);
       recognitionRef.current.stop();
       
@@ -100,14 +105,12 @@ export default function Home() {
       if (finalTranscript.trim()) {
         handleFinalTranslate(finalTranscript, finalSpeaker);
       }
-      // --- 5. RESET for the next session ---
       setLiveSourceTranscript(""); 
       finalizedTranscriptRef.current = "";
     }
   };
 
   const handleFinalTranslate = async (text, speaker) => {
-    // This function remains unchanged
     if (!text || !speaker) return;
     const sourceLang = speaker === 'patient' ? patientLang : providerLang;
     const targetLang = speaker === 'patient' ? providerLang : patientLang;
@@ -132,7 +135,6 @@ export default function Home() {
   };
 
   const speak = (text, lang) => {
-    // This function remains unchanged
     if (!text || !lang || isSpeaking) return;
     speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
@@ -144,7 +146,6 @@ export default function Home() {
   };
 
   const stopSpeaking = () => {
-    // This function remains unchanged
     speechSynthesis.cancel();
     setIsSpeaking(false);
   };
