@@ -2,7 +2,7 @@
 
 A web application that provides real-time, multilingual translation to bridge communication gaps between patients and healthcare providers. This tool uses the browser's Web Speech API for transcription and Google's Gemini API for high-quality, contextual translation.
 
-![App Screenshot](placeholder.png)
+![App Screenshot](Screenshot_27-8-2025_6221_localhost.jpeg)
 *Replace `placeholder.png` with a screenshot of your app.*
 
 ---
