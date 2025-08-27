@@ -15,7 +15,7 @@ const languages = [
   { code: 'ar-SA', name: 'Arabic' },
 ];
 
-// Helper function to detect mobile devices
+// Helper function to detect if the app is running on a mobile device
 const isMobileDevice = () => {
   if (typeof window !== 'undefined') {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -36,7 +36,7 @@ export default function Home() {
   // Refs
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(false);
-  const cumulativeTranscriptRef = useRef("");
+  const cumulativeTranscriptRef = useRef(""); // Specifically for mobile logic
 
   // Effect to keep our listening state ref in sync
   useEffect(() => {
@@ -57,30 +57,38 @@ export default function Home() {
     // --- SEPARATE LOGIC IMPLEMENTATION ---
     const isMobile = isMobileDevice();
 
-    recog.onresult = (event) => {
-      let interimTranscript = "";
-      // On mobile, we only care about the newest part of the speech
-      const startIndex = isMobile ? event.resultIndex : 0;
-      for (let i = startIndex; i < event.results.length; ++i) {
-        interimTranscript += event.results[i][0].transcript;
-      }
-      // On mobile, we append. On desktop, we overwrite.
-      setLiveSourceTranscript(cumulativeTranscriptRef.current + interimTranscript);
-    };
+    if (isMobile) {
+      // --- MOBILE LOGIC ---
+      recog.onresult = (event) => {
+        let interimTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          interimTranscript += event.results[i][0].transcript;
+        }
+        setLiveSourceTranscript(cumulativeTranscriptRef.current + interimTranscript);
+      };
 
-    recog.onend = () => {
-      // This auto-restart logic will ONLY run on mobile devices
-      if (isMobile && isListeningRef.current) {
-        console.log("Mobile timeout detected, saving transcript and restarting...");
-        // Save the full transcript so far before restarting
-        cumulativeTranscriptRef.current = liveSourceTranscript + " ";
-        recognitionRef.current.start();
-      } else {
-        // On desktop, or on manual stop, just clean up the state
+      recog.onend = () => {
+        if (isListeningRef.current) {
+          console.log("Mobile timeout detected, saving transcript and restarting...");
+          cumulativeTranscriptRef.current = liveSourceTranscript + " ";
+          recognitionRef.current.start();
+        }
+      };
+    } else {
+      // --- DESKTOP LOGIC (The simpler, original version) ---
+      recog.onresult = (event) => {
+        let fullTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript;
+        }
+        setLiveSourceTranscript(fullTranscript);
+      };
+
+      recog.onend = () => {
         setIsListening(false);
         setCurrentSpeaker(null);
-      }
-    };
+      };
+    }
     
     recognitionRef.current = recog;
   }, []);
