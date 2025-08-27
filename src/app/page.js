@@ -130,38 +130,35 @@ export default function Home() {
 
   return (
     <main className="flex flex-col items-center min-h-screen p-4 bg-gray-100 font-sans">
-      {/* Mobile-Friendly Container: limits width on large screens, full width on mobile */}
       <div className="w-full max-w-5xl mx-auto">
         <header className="text-center mb-6">
-          {/* Mobile-Friendly Text: Smaller on mobile, larger on desktop */}
           <h1 className="text-3xl sm:text-4xl font-bold text-gray-800">AI Health Translator</h1>
           <p className="text-lg text-gray-600">Seamless Patient-Provider Communication</p>
         </header>
 
-        {/* This grid is already mobile-friendly: stacks on mobile, side-by-side on medium screens+ */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-white rounded-lg shadow-md mb-6">
           <div>
-            <label htmlFor="patient-lang" className="block text-lg font-medium text-gray-700">Patient's Language</label>
+            {/* --- FIX 1: Replaced ' with &apos; --- */}
+            <label htmlFor="patient-lang" className="block text-lg font-medium text-gray-700">Patient&apos;s Language</label>
             <select id="patient-lang" value={patientLang} onChange={e => setPatientLang(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
               {languages.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
             </select>
           </div>
           <div>
-            <label htmlFor="provider-lang" className="block text-lg font-medium text-gray-700">Provider's Language</label>
+            {/* --- FIX 2: Replaced ' with &apos; --- */}
+            <label htmlFor="provider-lang" className="block text-lg font-medium text-gray-700">Provider&apos;s Language</label>
             <select id="provider-lang" value={providerLang} onChange={e => setProviderLang(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
               {languages.map(lang => <option key={lang.code} value={lang.code}>{lang.name}</option>)}
             </select>
           </div>
         </div>
 
-        {/* Mobile-Friendly Buttons: Stacks buttons vertically on small screens, horizontal on larger screens */}
         <div className="flex flex-col sm:flex-row sm:justify-around items-center p-4 mb-6 space-y-4 sm:space-y-0 sm:space-x-4">
           <button onClick={() => startListening('patient')} disabled={isListening || isSpeaking} className="w-full sm:w-auto px-6 py-3 text-base sm:px-8 sm:py-4 sm:text-lg font-semibold rounded-full text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 transition-colors">Patient Speaks</button>
           <button onClick={() => { if (isListening) stopListening(); if (isSpeaking) stopSpeaking(); }} disabled={!isListening && !isSpeaking} className="w-full sm:w-auto px-6 py-3 text-base sm:px-8 sm:py-4 sm:text-lg font-semibold rounded-full text-white bg-red-600 hover:bg-red-700 disabled:bg-gray-400 transition-colors">STOP</button>
           <button onClick={() => startListening('provider')} disabled={isListening || isSpeaking} className="w-full sm:w-auto px-6 py-3 text-base sm:px-8 sm:py-4 sm:text-lg font-semibold rounded-full text-white bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 transition-colors">Provider Speaks</button>
         </div>
 
-        {/* This grid is already mobile-friendly: stacks on mobile/tablet, side-by-side on large screens+ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white p-4 rounded-lg shadow-md">
             <h2 className="text-2xl font-semibold mb-4 border-b pb-2">Live Transcript</h2>
@@ -171,12 +168,11 @@ export default function Home() {
                 <div className="mt-4 p-4 border-2 border-dashed rounded-lg min-h-[120px] text-gray-800">
                   {liveSourceTranscript}
                 </div>
-                {/* --- NEW FEATURE: User Instruction --- */}
                 <p className="text-sm text-gray-500 italic text-center mt-2">When you are finished speaking, press the STOP button.</p>
               </div>
             ) : (
               <div className="flex items-center justify-center min-h-[160px] text-gray-500 text-center">
-                <p>Click "Patient Speaks" or "Provider Speaks" to begin.</p>
+                <p>Click &quot;Patient Speaks&quot; or &quot;Provider Speaks&quot; to begin.</p>
               </div>
             )}
           </div>
@@ -188,7 +184,8 @@ export default function Home() {
                 <div key={index} className={`flex ${msg.speaker === 'patient' ? 'justify-start' : 'justify-end'}`}>
                   <div className={`max-w-md p-3 rounded-lg ${msg.speaker === 'patient' ? 'bg-blue-100' : 'bg-teal-100'}`}>
                     <p className="text-sm text-gray-500 font-medium capitalize">{msg.speaker} said:</p>
-                    <p className="text-sm italic text-gray-600">"{msg.originalText}"</p>
+                    {/* --- FIX 3: Replaced " with &quot; --- */}
+                    <p className="text-sm italic text-gray-600">&quot;{msg.originalText}&quot;</p>
                     <p className="text-lg font-semibold text-gray-800 mt-1">{msg.translatedText}</p>
                     <button onClick={() => speak(msg.translatedText, msg.targetLang)} title="Play audio" className="text-indigo-600 mt-1 text-2xl">🔊</button>
                   </div>
